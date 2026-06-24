@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block body_class %}login-page{% endblock %}
+
+{% block content %}
+<div class="glass-card fade-in login-card">
+    <h2 style="margin-bottom: 2rem; text-align: center;">Welcome Back</h2>
+    
+    <form method="POST" action="{{ url_for('routes.login') }}">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" class="form-control" required autocomplete="username">
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" class="form-control" required autocomplete="current-password">
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Login</button>
+    </form>
+    
+    <p style="text-align: center; margin-top: 1.5rem; color: var(--text-secondary);">
+        Don't have an account? <a href="{{ url_for('routes.register') }}" style="color: var(--primary-color); text-decoration: none;">Register here</a>
+    </p>
+</div>
+{% endblock %}

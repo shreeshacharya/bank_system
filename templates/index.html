@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>Dashboard</h2>
+    <a href="{{ url_for('routes.transaction') }}" class="btn btn-primary">New Transaction</a>
+</div>
+
+<div class="dashboard-stats" style="display: flex; gap: 2rem; margin-bottom: 2rem;">
+    <div class="glass-card balance-card fade-in" style="flex: 1; margin-bottom: 0;">
+        <h3>Current Balance</h3>
+        <div class="balance-amount">₹{{ "%.2f"|format(current_user.balance) }}</div>
+    </div>
+    <div class="glass-card fade-in" style="flex: 1; margin-bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <h3>System Stats</h3>
+        <p style="font-size: 1.2rem; margin-top: 1rem;">Total Users: <strong>{{ total_users }}</strong></p>
+        <div style="width: 200px; height: 200px; margin-top: 1rem;">
+            <canvas id="accountChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('accountChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Savings', 'Current'],
+            datasets: [{
+                data: [{{ savings_count }}, {{ current_count }}],
+                backgroundColor: [
+                    'rgba(16, 185, 129, 0.8)', // success color
+                    'rgba(99, 102, 241, 0.8)'  // primary color
+                ],
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#f8fafc' }
+                }
+            }
+        }
+    });
+});
+</script>
+
+<div class="glass-card fade-in" style="animation-delay: 0.2s;">
+    <h3>Recent Transactions</h3>
+    {% if transactions %}
+    <ul class="transactions-list">
+        {% for tx in transactions %}
+        <li class="transaction-item">
+            <div class="tx-icon tx-{{ tx.type }}">
+                {% if tx.type == 'deposit' %}
+                    &darr;
+                {% elif tx.type == 'withdraw' %}
+                    &uarr;
+                {% elif tx.type == 'transfer_out' %}
+                    &nearr;
+                {% elif tx.type == 'transfer_in' %}
+                    &swarr;
+                {% endif %}
+            </div>
+            <div class="tx-info">
+                <div class="tx-title">{{ tx.type|capitalize }}</div>
+                <div class="tx-date">{{ tx.timestamp.strftime('%b %d, %Y %H:%M') }} - {{ tx.description }}</div>
+            </div>
+            <div class="tx-amount {% if tx.type in ['deposit', 'transfer_in'] %}amount-positive{% else %}amount-negative{% endif %}">
+                {% if tx.type in ['deposit', 'transfer_in'] %}+{% else %}-{% endif %}₹{{ "%.2f"|format(tx.amount) }}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p style="color: var(--text-secondary); margin-top: 1rem;">No transactions found. Make a deposit to get started!</p>
+    {% endif %}
+</div>
+{% endblock %}

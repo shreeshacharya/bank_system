@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="glass-card fade-in" style="max-width: 600px; margin: 2rem auto;">
+    <h2 style="margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
+        New Transaction
+        <span style="font-size: 1rem; color: var(--text-secondary); font-weight: normal;">Balance: ₹{{ "%.2f"|format(current_user.balance) }}</span>
+    </h2>
+    
+    <form method="POST" action="{{ url_for('routes.transaction') }}">
+        <div class="form-group">
+            <label for="action">Transaction Type</label>
+            <select id="action" name="action" class="form-control" required style="background-color: var(--background-dark);">
+                <option value="deposit">Deposit</option>
+                <option value="withdraw">Withdraw</option>
+                <option value="transfer">Transfer to User</option>
+            </select>
+        </div>
+        
+        <div class="form-group" id="target-user-group" style="display: none;">
+            <label for="target_username">Recipient Username</label>
+            <input type="text" id="target_username" name="target_username" class="form-control" placeholder="Enter recipient's username">
+        </div>
+        
+        <div class="form-group">
+            <label for="amount">Amount (₹)</label>
+            <input type="number" id="amount" name="amount" class="form-control" step="0.01" min="0.01" required placeholder="0.00">
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description (Optional)</label>
+            <input type="text" id="description" name="description" class="form-control" placeholder="What is this for?">
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Process Transaction</button>
+    </form>
+</div>
+{% endblock %}

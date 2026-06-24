@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block body_class %}login-page{% endblock %}
+
+{% block content %}
+<div class="glass-card fade-in login-card">
+    <h2 style="margin-bottom: 2rem; text-align: center;">Create an Account</h2>
+    
+    <form method="POST" action="{{ url_for('routes.register') }}">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" class="form-control" required autocomplete="username">
+        </div>
+        
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" class="form-control" required autocomplete="email">
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" class="form-control" required autocomplete="new-password">
+        </div>
+        
+        <div class="form-group">
+            <label for="account_type">Account Type</label>
+            <select id="account_type" name="account_type" class="form-control" required style="background-color: var(--background-dark);">
+                <option value="savings">Savings</option>
+                <option value="current">Current</option>
+            </select>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Register</button>
+    </form>
+    
+    <p style="text-align: center; margin-top: 1.5rem; color: var(--text-secondary);">
+        Already have an account? <a href="{{ url_for('routes.login') }}" style="color: var(--primary-color); text-decoration: none;">Login here</a>
+    </p>
+</div>
+{% endblock %}
