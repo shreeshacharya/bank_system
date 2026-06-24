@@ -1,0 +1,21 @@
+# Environment variables
+.env
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python cache files
+__pycache__/
+*.pyc
+
+# Local databases and user data
+*.db
+*.data
+users.json
+accounts.db
+
+# Editor configurations
+.vscode/
+.idea/

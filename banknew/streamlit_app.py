@@ -1,12 +1,16 @@
 import streamlit as st
 import bank_database as db
 from types import SimpleNamespace
+from datetime import datetime
+import posthog_client as ph
 
 st.set_page_config(page_title="Bank Management System", layout="wide")
 
 # Initialize session state
 if 'username' not in st.session_state:
     st.session_state.username = None
+if 'login_time' not in st.session_state:
+    st.session_state.login_time = None
 
 def login_page():
     """Login and Signup page."""
@@ -21,9 +25,22 @@ def login_page():
         if st.button("Login"):
             if db.validate_user(username, password):
                 st.session_state.username = username
+                st.session_state.login_time = datetime.now().isoformat()
+
+                # ── PostHog: identify + login event ──────────────────────
+                ph.identify(username, {"username": username})
+                ph.track('user_logged_in', username, {
+                    "login_time": st.session_state.login_time,
+                    "platform": "streamlit",
+                })
+                # ─────────────────────────────────────────────────────────
+
                 st.success("Logged in successfully!")
                 st.rerun()
             else:
+                # ── PostHog: failed login ─────────────────────────────────
+                ph.track('login_failed', username or 'unknown', {"platform": "streamlit"})
+                # ─────────────────────────────────────────────────────────
                 st.error("Invalid credentials")
     
     with tab2:
@@ -32,6 +49,13 @@ def login_page():
         new_pass = st.text_input("New Password", type="password", key="signup_pass")
         if st.button("Sign Up"):
             if db.register_user(new_user, new_pass):
+                # ── PostHog: signup event ─────────────────────────────────
+                ph.identify(new_user, {"username": new_user})
+                ph.track('user_signed_up', new_user, {
+                    "signup_time": datetime.now().isoformat(),
+                    "platform": "streamlit",
+                })
+                # ─────────────────────────────────────────────────────────
                 st.success("Account created! Please log in.")
             else:
                 st.error("Username already exists")
@@ -40,12 +64,36 @@ def main_app():
     """Main app after login."""
     st.sidebar.title(f"Welcome, {st.session_state.username}!")
     if st.sidebar.button("Logout"):
+        username = st.session_state.username
+        login_time_str = st.session_state.login_time
+
+        # ── PostHog: logout event with session duration ───────────────────
+        session_duration = None
+        if login_time_str:
+            login_dt = datetime.fromisoformat(login_time_str)
+            session_duration = round((datetime.now() - login_dt).total_seconds())
+
+        ph.track('user_logged_out', username, {
+            "session_duration_seconds": session_duration,
+            "logout_time": datetime.now().isoformat(),
+            "platform": "streamlit",
+        })
+        # ─────────────────────────────────────────────────────────────────
+
         st.session_state.username = None
+        st.session_state.login_time = None
         st.rerun()
     
     page = st.sidebar.radio("Select Page", 
                             ["Dashboard", "Create Account", "View Accounts", 
                              "Check Balance", "Deposit", "Withdraw", "Modify Account", "Delete Account"])
+
+    # ── PostHog: track page navigation ───────────────────────────────────
+    ph.track('page_visited', st.session_state.username, {
+        "page_name": page,
+        "platform": "streamlit",
+    })
+    # ─────────────────────────────────────────────────────────────────────
     
     if page == "Dashboard":
         dashboard_page()
@@ -85,6 +133,16 @@ def create_page():
         if st.form_submit_button("Create Account"):
             try:
                 db.create_account(int(accNo), name, acc_type[0].upper(), int(deposit))
+
+                # ── PostHog ───────────────────────────────────────────────
+                ph.track('account_created', st.session_state.username, {
+                    "accNo": int(accNo),
+                    "acc_type": acc_type,
+                    "initial_deposit": int(deposit),
+                    "platform": "streamlit",
+                })
+                # ─────────────────────────────────────────────────────────
+
                 st.success("Account created successfully!")
             except Exception as e:
                 st.error(f"Error: {str(e)}")
@@ -113,6 +171,12 @@ def balance_page():
     if st.button("Check Balance"):
         bal = db.get_balance(int(accNo))
         if bal is not None:
+            # ── PostHog ───────────────────────────────────────────────────
+            ph.track('balance_checked', st.session_state.username, {
+                "accNo": int(accNo),
+                "platform": "streamlit",
+            })
+            # ─────────────────────────────────────────────────────────────
             st.success(f"Balance: ₹{bal}")
         else:
             st.error("Account not found")
@@ -126,6 +190,15 @@ def deposit_page():
         if st.form_submit_button("Deposit"):
             try:
                 db.update_balance(int(accNo), int(amount), mode=1)
+
+                # ── PostHog ───────────────────────────────────────────────
+                ph.track('deposit_made', st.session_state.username, {
+                    "accNo": int(accNo),
+                    "amount": int(amount),
+                    "platform": "streamlit",
+                })
+                # ─────────────────────────────────────────────────────────
+
                 st.success(f"Deposited ₹{amount} successfully!")
             except Exception as e:
                 st.error(f"Error: {str(e)}")
@@ -139,6 +212,15 @@ def withdraw_page():
         if st.form_submit_button("Withdraw"):
             try:
                 db.update_balance(int(accNo), int(amount), mode=2)
+
+                # ── PostHog ───────────────────────────────────────────────
+                ph.track('withdrawal_made', st.session_state.username, {
+                    "accNo": int(accNo),
+                    "amount": int(amount),
+                    "platform": "streamlit",
+                })
+                # ─────────────────────────────────────────────────────────
+
                 st.success(f"Withdrawn ₹{amount} successfully!")
             except Exception as e:
                 st.error(f"Error: {str(e)}")
@@ -163,6 +245,15 @@ def modify_page():
             if st.form_submit_button("Update Account"):
                 try:
                     db.modify_account(int(acc.accNo), new_name, new_type[0].upper(), int(new_deposit))
+
+                    # ── PostHog ───────────────────────────────────────────
+                    ph.track('account_modified', st.session_state.username, {
+                        "accNo": int(acc.accNo),
+                        "new_type": new_type,
+                        "platform": "streamlit",
+                    })
+                    # ─────────────────────────────────────────────────────
+
                     st.success("Account updated successfully!")
                     del st.session_state.modify_account
                 except Exception as e:
@@ -175,6 +266,14 @@ def delete_page():
     if st.button("Delete Account", type="secondary"):
         try:
             db.delete_account(int(accNo))
+
+            # ── PostHog ───────────────────────────────────────────────────
+            ph.track('account_deleted', st.session_state.username, {
+                "accNo": int(accNo),
+                "platform": "streamlit",
+            })
+            # ─────────────────────────────────────────────────────────────
+
             st.success("Account deleted successfully!")
         except Exception as e:
             st.error(f"Error: {str(e)}")

@@ -2,10 +2,21 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from functools import wraps
 import os
 from types import SimpleNamespace
+from datetime import datetime
 import bank_database as db
+import posthog_client as ph
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'
+
+# ── PostHog Template Variables ─────────────────────────────────────────────
+@app.context_processor
+def inject_posthog():
+    return {
+        'posthog_api_key': os.environ.get('POSTHOG_API_KEY'),
+        'posthog_host': os.environ.get('POSTHOG_HOST', 'https://eu.i.posthog.com')
+    }
+
 
 # -------------------- Login Auth -------------------- #
 def login_required(f):
@@ -27,15 +38,47 @@ def login():
         username = request.form['username']
         password = request.form['password']
         if db.validate_user(username, password):
-
             session['username'] = username
+            session['login_time'] = datetime.now().isoformat()
+
+            # ── PostHog: identify + login event ──────────────────────────
+            ph.identify(username, {"username": username})
+            ph.track('user_logged_in', username, {
+                "login_time": session['login_time'],
+                "ip_address": request.remote_addr,
+            })
+            # ─────────────────────────────────────────────────────────────
+
             return redirect(url_for('index'))
+
+        # ── PostHog: failed login ────────────────────────────────────────
+        ph.track('login_failed', request.form.get('username', 'unknown'), {
+            "ip_address": request.remote_addr,
+        })
+        # ─────────────────────────────────────────────────────────────────
+
         flash('Invalid credentials')
     return render_template('login.html')
 
 @app.route('/logout')
 def logout():
+    username = session.get('username', 'unknown')
+    login_time_str = session.get('login_time')
+
+    # ── PostHog: logout event with session duration ──────────────────────
+    session_duration = None
+    if login_time_str:
+        login_dt = datetime.fromisoformat(login_time_str)
+        session_duration = round((datetime.now() - login_dt).total_seconds())
+
+    ph.track('user_logged_out', username, {
+        "session_duration_seconds": session_duration,
+        "logout_time": datetime.now().isoformat(),
+    })
+    # ────────────────────────────────────────────────────────────────────
+
     session.pop('username', None)
+    session.pop('login_time', None)
     return redirect(url_for('login'))
 
 # -------------------- Account Operations -------------------- #
@@ -50,6 +93,15 @@ def create():
         try:
             db.create_account(accNo, name, acc_type, deposit)
             flash('Account created successfully')
+
+            # ── PostHog ──────────────────────────────────────────────────
+            ph.track('account_created', session['username'], {
+                "accNo": accNo,
+                "acc_type": acc_type,
+                "initial_deposit": deposit,
+            })
+            # ─────────────────────────────────────────────────────────────
+
         except Exception as e:
             flash(str(e))
         return redirect(url_for('create'))
@@ -62,6 +114,11 @@ def delete():
         accNo = int(request.form['accNo'])
         db.delete_account(accNo)
         flash('Account deleted')
+
+        # ── PostHog ──────────────────────────────────────────────────────
+        ph.track('account_deleted', session['username'], {"accNo": accNo})
+        # ─────────────────────────────────────────────────────────────────
+
         return redirect(url_for('delete'))
     return render_template('delete.html')
 
@@ -74,6 +131,14 @@ def deposit():
         try:
             db.update_balance(accNo, amount, mode=1)
             flash('Deposited successfully')
+
+            # ── PostHog ──────────────────────────────────────────────────
+            ph.track('deposit_made', session['username'], {
+                "accNo": accNo,
+                "amount": amount,
+            })
+            # ─────────────────────────────────────────────────────────────
+
         except Exception as e:
             flash(str(e))
         return redirect(url_for('deposit'))
@@ -88,6 +153,14 @@ def withdraw():
         try:
             db.update_balance(accNo, amount, mode=2)
             flash('Withdrawn successfully')
+
+            # ── PostHog ──────────────────────────────────────────────────
+            ph.track('withdrawal_made', session['username'], {
+                "accNo": accNo,
+                "amount": amount,
+            })
+            # ─────────────────────────────────────────────────────────────
+
         except Exception as e:
             flash(str(e))
         return redirect(url_for('withdraw'))
@@ -102,6 +175,11 @@ def balance():
         result = db.get_balance(accNo)
         if result is None:
             flash('Account not found')
+        else:
+            # ── PostHog ──────────────────────────────────────────────────
+            ph.track('balance_checked', session['username'], {"accNo": accNo})
+            # ─────────────────────────────────────────────────────────────
+
     return render_template('balance.html', result=result)
 
 @app.route('/modify', methods=['GET', 'POST'])
@@ -109,7 +187,6 @@ def balance():
 def modify():
     account = None
     if request.method == 'POST':
-        # update flow (form includes hidden 'update' flag)
         if request.form.get('update'):
             accNo = int(request.form['accNo'])
             name = request.form['name']
@@ -117,8 +194,15 @@ def modify():
             deposit = int(request.form['deposit'])
             db.modify_account(accNo, name, acc_type, deposit)
             flash('Account modified')
+
+            # ── PostHog ──────────────────────────────────────────────────
+            ph.track('account_modified', session['username'], {
+                "accNo": accNo,
+                "new_type": acc_type,
+            })
+            # ─────────────────────────────────────────────────────────────
+
             return redirect(url_for('modify'))
-        # lookup flow: fetch account and show form
         else:
             accNo = int(request.form['accNo'])
             row = db.get_account(accNo)
@@ -136,6 +220,11 @@ def accounts():
     accounts = []
     for r in rows:
         accounts.append(SimpleNamespace(accNo=r[0], name=r[1], type=r[2], deposit=r[3]))
+
+    # ── PostHog ──────────────────────────────────────────────────────────
+    ph.track('page_visited', session['username'], {"page_name": "all_accounts"})
+    # ─────────────────────────────────────────────────────────────────────
+
     return render_template('accounts.html', accounts=accounts)
 
 # -------------------- Dashboard -------------------- #
@@ -143,6 +232,11 @@ def accounts():
 @login_required
 def dashboard():
     total_accounts, total_balance, saving_count, current_count = db.get_dashboard_stats()
+
+    # ── PostHog ──────────────────────────────────────────────────────────
+    ph.track('page_visited', session['username'], {"page_name": "dashboard"})
+    # ─────────────────────────────────────────────────────────────────────
+
     return render_template('dashboard.html',
                            total_accounts=total_accounts,
                            total_balance=total_balance,
@@ -163,6 +257,12 @@ def signup():
         password = request.form['password']
         if db.register_user(username, password):
             flash('Account created successfully. Please log in.')
+
+            # ── PostHog ──────────────────────────────────────────────────
+            ph.identify(username, {"username": username})
+            ph.track('user_signed_up', username, {"signup_time": datetime.now().isoformat()})
+            # ─────────────────────────────────────────────────────────────
+
             return redirect(url_for('login'))
         else:
             flash('Username already exists. Choose another.')
@@ -174,6 +274,6 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
-        debug=False
+        debug=False,
+        use_reloader=True   # Auto-restart when any .py file changes
     )
-
