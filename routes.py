@@ -198,3 +198,29 @@ def transaction():
                 return redirect(url_for('routes.index'))
                 
     return render_template('transaction.html')
+
+
+@bp.route('/debug-db')
+def debug_db():
+    from flask import current_app
+    uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', 'Not Set')
+    
+    # Mask password for security
+    masked_uri = uri
+    if "@" in uri:
+        try:
+            parts = uri.split("@")
+            prefix = parts[0]
+            host = parts[1]
+            if "://" in prefix:
+                db_type, creds = prefix.split("://", 1)
+                if ":" in creds:
+                    username = creds.split(":")[0]
+                    masked_uri = f"{db_type}://{username}:****@{host}"
+                else:
+                    masked_uri = f"{db_type}://{creds}:****@{host}"
+        except Exception:
+            masked_uri = "Could not parse URI safely"
+            
+    return f"Active Database URI: {masked_uri}"
+
