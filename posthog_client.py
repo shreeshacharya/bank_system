@@ -4,15 +4,30 @@ Centralized PostHog analytics client for the Bank Management System.
 Tracks user events like login, logout, and banking operations.
 """
 
+import os
 from posthog import Client
 from datetime import datetime
 
+# Load environment variables from .env file if python-dotenv is installed
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+posthog_api_key = os.environ.get("POSTHOG_API_KEY")
+posthog_host = os.environ.get("POSTHOG_HOST", "https://eu.i.posthog.com")
+
 # ── PostHog Configuration ──────────────────────────────────────────────────
-_client = Client(
-    project_api_key="phc_BTSPAt8jobzbdPRsWuf7TfACiDT55PuM5wZxndNKpCW4",
-    host="https://eu.i.posthog.com",   # EU Cloud region
-    sync_mode=True,                     # Send events immediately (not batched)
-)
+if posthog_api_key:
+    _client = Client(
+        project_api_key=posthog_api_key,
+        host=posthog_host,
+        sync_mode=True,                     # Send events immediately (not batched)
+    )
+else:
+    _client = None
+    print("[PostHog INFO] POSTHOG_API_KEY is not set. Analytics tracking is disabled.")
 
 
 def track(event: str, distinct_id: str, properties: dict = None):
@@ -24,6 +39,8 @@ def track(event: str, distinct_id: str, properties: dict = None):
         distinct_id : Unique identifier for the user (username)
         properties  : Optional dict of extra metadata to attach
     """
+    if not _client:
+        return
     try:
         props = properties or {}
         props.setdefault("app", "bank_management_system")
@@ -39,8 +56,11 @@ def identify(distinct_id: str, user_properties: dict = None):
     Associate a user with their properties in PostHog.
     Uses 'set' to attach person properties to the distinct_id.
     """
+    if not _client:
+        return
     try:
         _client.set(distinct_id=distinct_id, properties=user_properties or {})
         print("[PostHog OK] identified user='{}'".format(distinct_id))
     except Exception as e:
         print("[PostHog ERR] Failed to identify user '{}': {}".format(distinct_id, e))
+

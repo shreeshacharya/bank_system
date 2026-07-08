@@ -35,7 +35,12 @@ if database_url:
         
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bank.db'
+    # Vercel's filesystem is read-only except for /tmp.
+    # Data stored here will reset every time the serverless function sleeps.
+    if os.environ.get('VERCEL') == '1':
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/bank.db'
+    else:
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bank.db'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
