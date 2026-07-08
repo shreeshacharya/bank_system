@@ -202,14 +202,16 @@ def transaction():
 
 @bp.route('/debug-db')
 def debug_db():
-    from flask import current_app
-    uri = current_app.config.get('SQLALCHEMY_DATABASE_URI', 'Not Set')
-    
-    # Mask password for security
-    masked_uri = uri
-    if "@" in uri:
-        try:
-            parts = uri.split("@")
+    try:
+        from flask import current_app
+        uri = current_app.config.get('SQLALCHEMY_DATABASE_URI')
+        if not uri:
+            return "Active Database URI: Not Set"
+            
+        uri_str = str(uri)
+        masked_uri = uri_str
+        if "@" in uri_str:
+            parts = uri_str.split("@")
             prefix = parts[0]
             host = parts[1]
             if "://" in prefix:
@@ -219,8 +221,8 @@ def debug_db():
                     masked_uri = f"{db_type}://{username}:****@{host}"
                 else:
                     masked_uri = f"{db_type}://{creds}:****@{host}"
-        except Exception:
-            masked_uri = "Could not parse URI safely"
-            
-    return f"Active Database URI: {masked_uri}"
+        return f"Active Database URI: {masked_uri}"
+    except Exception as e:
+        return f"Error parsing DB URI: {str(e)}"
+
 
